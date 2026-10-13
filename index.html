@@ -140,6 +140,7 @@ li.task:last-child{border-bottom:0}
 .task.open .note{display:block}
 .empty{color:var(--muted);padding:40px 0;text-align:center}
 .foot{color:var(--muted);font-size:.82rem;margin-top:40px;display:flex;align-items:center;gap:10px}
+.foot [data-mode="live"]::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--lime);margin-right:8px;vertical-align:1px}
 .foot .mono{width:18px;height:18px;color:var(--ink)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 @media (max-width:820px){.track{grid-template-columns:repeat(4,1fr)}}
@@ -225,10 +226,11 @@ Brand kit<em>From the identity evolution lookbook</em></summary>
 <path d="M357.5 242.9H302.5C291.45 242.9 282.5 233.95 282.5 222.9V167.9C282.5 156.85 273.55 147.9 262.5 147.9H167.5C156.45 147.9 147.5 156.85 147.5 167.9V232.9C147.5 243.95 156.45 252.9 167.5 252.9H232.5C254.59 252.9 272.5 270.81 272.5 292.9V357.9C272.5 368.95 281.45 377.9 292.5 377.9H357.5C368.55 377.9 377.5 368.95 377.5 357.9V262.9C377.5 251.85 368.55 242.9 357.5 242.9Z" fill="currentColor"/>
 <path d="M232.5 272.9H167.5C156.454 272.9 147.5 281.855 147.5 292.9V357.9C147.5 368.946 156.454 377.9 167.5 377.9H232.5C243.546 377.9 252.5 368.946 252.5 357.9V292.9C252.5 281.855 243.546 272.9 232.5 272.9Z" fill="#D5FE00"/>
 </svg>
-Progress and notes are saved in this browser only.</p>
+<span id="sync">Progress saves in this browser only.</span></p>
 </div>
 <div class="copied" id="toast" role="status"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.99.3/dist/umd/supabase.js"></script>
 <script>
 const PHASES=[
  {n:1,t:"High priority / public facing",s:"Public facing"},
@@ -280,10 +282,15 @@ const TASKS=[
  [38,7,"Central asset library","Logos, fonts, colors, gradients, templates, social assets, print assets, exported PNG/JPG/PDF files.","Ready to seed: wordmark SVG, monogram SVG, First Block and Northura font files."]
 ].map(([id,p,name,desc,ref])=>({id,p,name,desc,ref}));
 
-const KEY="firsttech-rollout-v1";
+// ===== Supabase settings: paste your values from Supabase > Project Settings > API =====
+const SUPABASE_URL = "PASTE_YOUR_PROJECT_URL";
+const SUPABASE_ANON_KEY = "PASTE_YOUR_ANON_PUBLIC_KEY";
+// ========================================================================================
+
+const KEY="firsttech-rollout-v1", CODE_KEY="firsttech-rollout-code";
 let state={};
 try{state=JSON.parse(localStorage.getItem(KEY))||{}}catch(e){state={}}
-const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}};
+const cache=()=>{try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}};
 const st=id=>(state[id]&&state[id].s)||"todo";
 const note=id=>(state[id]&&state[id].n)||"";
 const LABEL={todo:"To do",progress:"In progress",done:"Done"};
@@ -291,6 +298,60 @@ const NEXT={todo:"progress",progress:"done",done:"todo"};
 let fPhase=null,fStatus="all",q="";
 const esc=s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
+/* ---- Sync ---- */
+const configured=SUPABASE_URL.startsWith("https://")&&!SUPABASE_ANON_KEY.startsWith("PASTE");
+let sb=null;
+const syncEl=document.getElementById("sync");
+function setSync(mode){
+  syncEl.textContent={
+    live:"Live. Changes save for everyone with the link.",
+    connecting:"Connecting…",
+    offline:"Can't reach the database. Changes are kept in this browser until it reconnects.",
+    local:"Not connected to a database yet. Progress saves in this browser only."
+  }[mode];
+  syncEl.dataset.mode=mode;
+}
+function getCode(force){
+  let c=null;try{c=localStorage.getItem(CODE_KEY)}catch(e){}
+  if(c&&!force)return c;
+  c=prompt(force?"That passcode didn't work. Enter the team passcode to save changes:":"Enter the team passcode to save changes:");
+  if(c){try{localStorage.setItem(CODE_KEY,c)}catch(e){}}
+  return c;
+}
+async function remote(fn,args,retry=true){
+  if(!sb)return true;
+  const code=getCode(false);
+  if(!code){showToast("Not saved. A team passcode is needed to edit.");return false}
+  const {error}=await sb.rpc(fn,{...args,p_code:code});
+  if(!error)return true;
+  if(/invalid_passcode/.test(error.message)){
+    try{localStorage.removeItem(CODE_KEY)}catch(e){}
+    if(retry&&getCode(true))return remote(fn,args,false);
+    showToast("Not saved. The passcode was wrong.");return false;
+  }
+  setSync("offline");showToast("Not saved. Check your connection and try again.");return false;
+}
+function applyRow(r){
+  state[r.id]={s:r.status,n:r.note||""};
+}
+async function connect(){
+  if(!configured||!window.supabase){setSync("local");return}
+  setSync("connecting");
+  try{
+    sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+    const {data,error}=await sb.from("rollout_tasks").select("id,status,note");
+    if(error)throw error;
+    state={};data.forEach(applyRow);cache();renderAll();setSync("live");
+    sb.channel("rollout").on("postgres_changes",{event:"UPDATE",schema:"public",table:"rollout_tasks"},p=>{
+      applyRow(p.new);cache();
+      const ta=document.activeElement;
+      const editing=ta&&ta.classList&&ta.classList.contains("note")&&+ta.closest(".task").dataset.id===p.new.id;
+      if(editing){renderTrack();renderChips()}else renderAll();
+    }).subscribe(s=>{if(s==="SUBSCRIBED")setSync("live");else if(s==="CHANNEL_ERROR"||s==="TIMED_OUT")setSync("offline")});
+  }catch(e){sb=null;setSync("offline")}
+}
+
+/* ---- Render ---- */
 function renderTrack(){
   const active=PHASES.find(ph=>TASKS.some(t=>t.p===ph.n&&st(t.id)!=="done"));
   document.getElementById("track").innerHTML=PHASES.map(ph=>{
@@ -330,6 +391,7 @@ function renderList(){
 }
 const renderAll=()=>{renderTrack();renderChips();renderList()};
 
+/* ---- Events ---- */
 document.getElementById("track").addEventListener("click",e=>{
   const b=e.target.closest(".mod");if(!b)return;const p=+b.dataset.p;fPhase=fPhase===p?null:p;renderTrack();renderList();
 });
@@ -337,32 +399,38 @@ document.getElementById("chips").addEventListener("click",e=>{
   const b=e.target.closest(".chip");if(!b)return;fStatus=b.dataset.f;renderChips();renderList();
 });
 document.getElementById("q").addEventListener("input",e=>{q=e.target.value;renderList()});
-document.getElementById("list").addEventListener("click",e=>{
-  const li=e.target.closest(".task");if(!li)return;const id=li.dataset.id;const t=TASKS[id-1];
+document.getElementById("list").addEventListener("click",async e=>{
+  const li=e.target.closest(".task");if(!li)return;const id=+li.dataset.id;
   if(e.target.closest(".state")){
-    state[id]={...state[id],s:NEXT[st(id)]};save();renderTrack();renderChips();
-    if(fStatus!=="all"){renderList();return}
-    const s=st(id);li.dataset.s=s;li.querySelector(".pill").textContent=LABEL[s];
-    li.querySelector(".state").setAttribute("aria-label",`${t.name}: ${LABEL[s]}. Change status`);
-    li.closest("section").querySelector(".ph-count").textContent=phaseCount(t.p);
+    const prev=st(id),next=NEXT[prev];
+    state[id]={...state[id],s:next};cache();renderAll();
+    const ok=await remote("rollout_update_task",{p_id:id,p_status:next,p_note:null});
+    if(!ok){state[id]={...state[id],s:prev};cache();renderAll()}
   } else if(e.target.closest(".notebtn")){
     li.classList.toggle("open");const o=li.classList.contains("open");
     e.target.textContent=o?"Hide note":"Add note";if(o)li.querySelector(".note").focus();
   }
 });
+const noteTimers={};
 document.getElementById("list").addEventListener("input",e=>{
   if(!e.target.classList.contains("note"))return;
-  const id=e.target.closest(".task").dataset.id;state[id]={...state[id],n:e.target.value};save();
+  const id=+e.target.closest(".task").dataset.id,val=e.target.value;
+  state[id]={...state[id],n:val};cache();
+  clearTimeout(noteTimers[id]);
+  noteTimers[id]=setTimeout(()=>remote("rollout_update_task",{p_id:id,p_status:null,p_note:val}),900);
 });
-document.getElementById("reset").addEventListener("click",()=>{
-  if(confirm("Reset every task to To do and clear all notes?")){state={};save();renderAll()}
+document.getElementById("reset").addEventListener("click",async()=>{
+  const msg=sb?"Reset every task to To do and clear all notes for everyone?":"Reset every task to To do and clear all notes?";
+  if(!confirm(msg))return;
+  if(await remote("rollout_reset_all",{})){state={};cache();renderAll()}
 });
 const toast=document.getElementById("toast");let tt;
+function showToast(m){toast.textContent=m;toast.classList.add("on");clearTimeout(tt);tt=setTimeout(()=>toast.classList.remove("on"),2200)}
 document.querySelectorAll(".sw button").forEach(b=>b.addEventListener("click",async()=>{
-  try{await navigator.clipboard.writeText(b.dataset.hex);toast.textContent=`Copied ${b.dataset.hex}`}catch(e){toast.textContent=b.dataset.hex}
-  toast.classList.add("on");clearTimeout(tt);tt=setTimeout(()=>toast.classList.remove("on"),1400);
+  try{await navigator.clipboard.writeText(b.dataset.hex);showToast(`Copied ${b.dataset.hex}`)}catch(e){showToast(b.dataset.hex)}
 }));
 renderAll();
+connect();
 </script>
 </body>
 </html>
