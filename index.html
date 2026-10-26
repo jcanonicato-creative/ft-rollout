@@ -136,6 +136,9 @@ li.task:last-child{border-bottom:0}
 .notebtn{background:none;border:0;padding:0;margin-top:8px;font-size:.84rem;color:var(--muted);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .note{display:none;margin-top:8px;width:100%;max-width:72ch;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;font-size:.9rem;resize:vertical;min-height:60px;font-family:var(--text)}
 .task.open .note{display:block}
+li.grp{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:12px 16px;background:var(--bg);border-bottom:1px solid var(--line);border-left:3px solid var(--lime)}
+li.grp span{font-weight:700;font-size:.95rem}
+li.grp small{color:var(--muted);font-size:.84rem}
 .empty{color:var(--muted);padding:40px 0;text-align:center}
 .foot{color:var(--muted);font-size:.82rem;margin-top:40px;display:flex;align-items:center;gap:10px}
 .foot [data-mode="live"]::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--lime);margin-right:8px;vertical-align:1px}
@@ -167,9 +170,9 @@ li.task:last-child{border-bottom:0}
 
     <div>
       <h1>Brand<br>rollout</h1>
-      <p>38 tasks across seven phases. Tap a task's module to move it from to do, to in progress, to done. The lime node marks the phase in play.</p>
+      <p><span id="total">52</span> tasks across seven phases. Tap a task's module to move it from to do, to in progress, to done. The lime node marks the phase in play.</p>
     </div>
-    <div class="score"><b id="pct">0%</b><span id="pctLbl">0 of 38 done</span></div>
+    <div class="score"><b id="pct">0%</b><span id="pctLbl">0 of 52 done</span></div>
   </header>
 
   <nav class="track" id="track" aria-label="Filter by phase"></nav>
@@ -269,22 +272,38 @@ const TASKS=[
  [27,5,"Internal launch announcement","“Introducing the refreshed First.tech identity” with short visual explaining new logo/color direction.","Core story: black is the infrastructure, lime is the signal."],
  [28,5,"Shared drive branding","Branded folder covers and template thumbnails for easy identification."],
  [29,5,"Office screens & posters","Reception screen, office screen loop, meeting room screen, internal posters."],
+ [39,5,"First.talks visuals","Visual identity for First.talks, the internal townhall where teams share knowledge: title lockup, invite and announcement graphics, screen backgrounds and speaker cards.","Treat First.talks as a sub-identity of First.tech, not a separate brand: same black and lime, same monogram cues.","First.talks"],
+ [40,5,"First.talks presentation template","Slide template for First.talks sessions: title, speaker intro, agenda, content, Q&A and closing slides.","Build it from the master presentation template (#6) so speakers only swap in their content.","First.talks"],
  [30,6,"Roll-up banners","For future events: black/lime version, minimal First.tech wordmark/monogram version.","Visual mood: bold fields of black and short, decisive type so it reads from a distance."],
  [31,6,"Badges","Staff badge template, visitor badge template, event badge version."],
  [32,6,"Branded apparel","Small monogram front, First.tech wordmark or line on back; premium, minimal, not loud."],
  [33,6,"Brochure / flyer","Generic First.tech version, event version, brand ecosystem version."],
  [34,6,"Event booth kit","Reusable backdrop, counter branding, LED screen layout, directional signage, QR stand."],
  [35,6,"Merchandise","Notebook, tote bag, sticker sheet, water bottle, laptop sleeve, pen."],
+ [41,6,"Notebook","Branded notebook for new joiners.","Use the same design as the notebook in #35 Merchandise.","Joiners kit"],
+ [42,6,"Pen","Branded pen for new joiners.","Use the same design as the pen in #35 Merchandise.","Joiners kit"],
+ [43,6,"Tumbler","Branded tumbler for new joiners.","#35 Merchandise lists a water bottle. Decide whether the tumbler replaces it or both are needed.","Joiners kit"],
+ [44,6,"ID lanyard","Branded lanyard for the staff ID card.","Keep it consistent with the badge templates in #31.","Joiners kit"],
+ [45,6,"ID card design","Staff ID card design for new joiners.","Overlaps the staff badge template in #31. Design it once and use it for both.","Joiners kit"],
+ [46,6,"Power bank / wireless charger","Branded power bank or wireless charger for new joiners. Confirm which one before ordering.",null,"Joiners kit"],
+ [47,6,"Lobby wayfinding design","Lobby wayfinding: reception wall branding, a floor and department directory, and directional signs from the entrance.","Coordinate with the reception screen in #29 so the lobby reads as one system.","Main office"],
+ [48,6,"Office overhead signage","Ceiling-hung signs marking zones, departments and routes through the office.","Use the same arrow and icon style as #12 so all wayfinding matches.","Main office"],
+ [49,6,"Glass graphic stickers","Frosted or printed film for glass walls and doors: privacy bands, brand patterns, and markings that make the glass visible.","A natural place for the monogram patterns from #12.","Main office"],
+ [50,6,"Employee nameplate","Desk or door nameplate template with name and job title.","Set it up as a template so nameplates for new joiners can be ordered quickly alongside the Joiners kit.","Main office"],
+ [51,6,"Office nameplate","Door plates for offices and meeting rooms.",null,"Main office"],
+ [52,6,"Office signage","General signs: restrooms, pantry, exits, safety and information signs.","Safety and exit signs may need to follow local regulations. Check before production.","Main office"],
  [36,7,"Brand audit","Find old logo usage, old red color usage, outdated templates, and list what needs replacing."],
  [37,7,"Template migration","Presentations, Word docs, proposals, social files, event files."],
  [38,7,"Central asset library","Logos, fonts, colors, gradients, templates, social assets, print assets, exported PNG/JPG/PDF files.","Ready to seed: wordmark SVG, monogram SVG, First Block and Northura font files."]
-].map(([id,p,name,desc,ref])=>({id,p,name,desc,ref}));
+].map(([id,p,name,desc,ref,g])=>({id,p,name,desc,ref,g}));
 
 // ===== Supabase settings: paste your values from Supabase > Project Settings > API =====
 const SUPABASE_URL = "PASTE_YOUR_PROJECT_URL";
 const SUPABASE_ANON_KEY = "PASTE_YOUR_ANON_PUBLIC_KEY";
 // ========================================================================================
 
+const GROUPS={"First.talks":"Internal townhall for sharing knowledge across First.tech","Joiners kit":"Branded welcome kit for new First.tech staff","Main office":"Signage and fit-out graphics for the main office. Plan for Arabic and English where needed"};
+document.getElementById("total").textContent=TASKS.length;
 const KEY="firsttech-rollout-v1", CODE_KEY="firsttech-rollout-code";
 let state={};
 try{state=JSON.parse(localStorage.getItem(KEY))||{}}catch(e){state={}}
@@ -377,7 +396,7 @@ function renderList(){
     const ts=TASKS.filter(t=>t.p===ph.n&&(fStatus==="all"||st(t.id)===fStatus)&&(!term||[t.name,t.desc,t.ref||"",note(t.id)].join(" ").toLowerCase().includes(term)));
     if(!ts.length)return "";
     return `<section class="phase"><div class="ph-head"><span class="ph-num">${ph.n}</span><h2>${ph.t}</h2><span class="ph-count">${phaseCount(ph.n)}</span></div>
-      <ul class="tasks">${ts.map(t=>{const s=st(t.id),n=note(t.id);return `<li class="task${n?" open":""}" data-id="${t.id}" data-s="${s}">
+      <ul class="tasks">${ts.map((t,i)=>{const s=st(t.id),n=note(t.id);const gh=t.g&&(i===0||ts[i-1].g!==t.g)?`<li class="grp"><span>${esc(t.g)}</span>${GROUPS[t.g]?`<small>${esc(GROUPS[t.g])}</small>`:""}</li>`:"";return gh+`<li class="task${n?" open":""}" data-id="${t.id}" data-s="${s}">
         <button class="state" aria-label="${esc(t.name)}: ${LABEL[s]}. Change status"></button>
         <div><p class="t-name"><small>#${t.id}</small><span>${esc(t.name)}</span></p><p class="t-desc">${esc(t.desc)}</p>
         ${t.ref?`<p class="ref">${esc(t.ref)}</p>`:""}
